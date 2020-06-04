@@ -60,7 +60,69 @@ dtype reduce_cpu(dtype *data, int n) {
 __global__ void
 kernel5(dtype *g_idata, dtype *g_odata, unsigned int n)
 {
+  __shared__  dtype scratch[MAX_THREADS];
+  unsigned int bid = gridDim.x * blockIdx.y + blockIdx.x;
+  unsigned int i = bid * blockDim.x + threadIdx.x;
+  unsigned int  num = gridDim.x * blockDim.x; //total num of threads
 
+  scratch[threadIdx.x]=g_idata[i];
+  int j=1;
+  while(i+j*num < n) {
+    scratch[threadIdx.x] += g_idata[i+j*num];
+    ++j;
+
+  }
+  __syncthreads ();
+
+  for(unsigned int s = blockDim.x >> 1; s >32; s = s >> 1) {
+    if(threadIdx.x < s) {
+      scratch[threadIdx.x] += scratch[threadIdx.x + s];
+    }
+    __syncthreads ();
+  }
+
+  if (threadIdx.x < 32) {
+		volatile dtype *volatileScratch = scratch;
+		volatileScratch[threadIdx.x] += volatileScratch[threadIdx.x + 32];
+    volatileScratch[threadIdx.x] += volatileScratch[threadIdx.x + 16];
+		volatileScratch[threadIdx.x] += volatileScratch[threadIdx.x + 8];
+		volatileScratch[threadIdx.x] += volatileScratch[threadIdx.x + 4];
+		volatileScratch[threadIdx.x] += volatileScratch[threadIdx.x + 2];
+		volatileScratch[threadIdx.x] += volatileScratch[threadIdx.x + 1];
+	}
+
+  if(threadIdx.x == 0) {
+    g_odata[bid] = scratch[0]; // the blocks overwrite the first "numOfBlocks" elements in the output array. each block writes at the block idx location.
+  }
+}
+
+__global__ void
+kernel5_2(dtype *g_idata, dtype *g_odata, unsigned int n)
+{
+  __shared__  dtype scratch[MAX_THREADS];
+  unsigned int bid = gridDim.x * blockIdx.y + blockIdx.x;
+  unsigned int i = bid * blockDim.x + threadIdx.x;
+  unsigned int  num = gridDim.x * blockDim.x; //total num of threads
+
+  scratch[threadIdx.x]=g_idata[i];
+  int j=1;
+  while(i+j*num < n) {
+    scratch[threadIdx.x] += g_idata[i+j*num];
+    ++j;
+
+  }
+  __syncthreads ();
+
+  for(unsigned int s = blockDim.x >> 1; s >= 1; s = s >> 1) {
+    if(threadIdx.x < s) {
+      scratch[threadIdx.x] += scratch[threadIdx.x + s];
+    }
+    __syncthreads ();
+  }
+
+  if(threadIdx.x == 0) {
+    g_odata[bid] = scratch[0]; // the blocks overwrite the first "numOfBlocks" elements in the output array. each block writes at the block idx location.
+  }
 }
 
 int 
